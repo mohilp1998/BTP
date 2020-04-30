@@ -1,0 +1,656 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Encryption and Decryption Engine Optimized for resources
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+//////// Storage Elements  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$storage sbox: $array [256] $of $uint<8>	//Notation first column, second row
+$storage rcon: $array [10] $of $uint<32>	//Each column is an element of array
+$storage check: $uint<1>	// For encryption stopping
+
+/////// Pipes for External Interfacing ///////////////////////////////////////////////////////////////////////////////////////////////////
+//Original pipe length are input_e-16, out_e-18, input_d-16, out_d-18
+//New lengths updated for password sequence, input_e-40, out_e-40, input_d-40, out_d-40
+
+$pipe input_e: $uint<8> $depth 40	// in pipe for connection from TIVA to FPGA
+$pipe out_e: $uint<8> $depth 40		// out pipe to connect FPGA to computer
+$pipe input_d: $uint<8> $depth 40	// in pipe from computer to FPGA
+$pipe out_d: $uint<8> $depth 40		// out pipe to connect FPGA to TIVA
+//$pipe debug_pipe: $uint<8> $depth 12
+
+////// constants /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$constant zero: $uint<8> := _h00
+$constant one: $uint<8> := _h01
+$constant zero_1bit: $uint<1> := _h0
+$constant one_1bit: $uint<1> := _h1
+$constant zero24: $uint<24> := _h000000
+$constant encry_counter: $uint<128> := _h54776f204f6e65204e696e652054776f
+$constant decry_counter: $uint<128> := _h54776f204f6e65204e696e652054776f
+
+//$constant key_0: $uint<32> := _h54686174
+//$constant key_1: $uint<32> := _h73206d79
+//$constant key_2: $uint<32> := _h204b756e
+//$constant key_3: $uint<32> := _h67204675
+
+//$constant rcon: $array[10] $of $uint<32> := ( _h01000000 _h02000000 _h04000000 _h08000000 _h10000000 _h20000000 _h40000000 _h80000000 _h1b000000 _h36000000 )
+//$constant sbox: $array[16][16] $of $uint<8> :=
+//((_h63 _hca _hb7 _h04 _h09 _h53 _hd0 _h51 _hcd _h60 _he0 _he7 _hba _h70 _he1 _h8c)
+//(_h7c _h82 _hfd _hc7 _h83 _hd1 _hef _ha3 _h0c _h81 _h32 _hc8 _h78 _h3e _hf8 _ha1)
+//(_h77 _hc9 _h93 _h23 _h2c _h00 _haa _h40 _h13 _h4f _h3a _h37 _h25 _hb5 _h98 _h89)
+//(_h7b _h7d _h26 _hc3 _h1a _hed _hfb _h8f _hec _hdc _h0a _h6d _h2e _h66 _h11 _h0d)
+//(_hf2 _hfa _h36 _h18 _h1b _h20 _h43 _h92 _h5f _h22 _h49 _h8d _h1c _h48 _h69 _hbf)
+//(_h6b _h59 _h3f _h96 _h6e _hfc _h4d _h9d _h97 _h2a _h06 _hd5 _ha6 _h03 _hd9 _he6)
+//(_h6f _h47 _hf7 _h05 _h5a _hb1 _h33 _h38 _h44 _h90 _h24 _h4e _hb4 _hf6 _h8e _h42)
+//(_hc5 _hf0 _hcc _h9a _ha0 _h5b _h85 _hf5 _h17 _h88 _h5c _ha9 _hc6 _h0e _h94 _h68)
+//(_h30 _had _h34 _h07 _h52 _h6a _h45 _hbc _hc4 _h46 _hc2 _h6c _he8 _h61 _h9b _h41)
+//(_h01 _hd4 _ha5 _h12 _h3b _hcb _hf9 _hb6 _ha7 _hee _hd3 _h56 _hdd _h35 _h1e _h99)
+//(_h67 _ha2 _he5 _h80 _hd6 _hbe _h02 _hda _h7e _hb8 _hac _hf4 _h74 _h57 _h87 _h2d)
+//(_h2b _haf _hf1 _he2 _hb3 _h39 _h7f _h21 _h3d _h14 _h62 _hea _h1f _hb9 _he9 _h0f)
+//(_hfe _h9c _h71 _heb _h29 _h4a _h50 _h10 _h64 _hde _h91 _h65 _h4b _h86 _hce _hb0)
+//(_hd7 _ha4 _hd8 _h27 _he3 _h4c _h3c _hff _h5d _h5e _h95 _h7a _hbd _hc1 _h55 _h54)
+//(_hab _h72 _h31 _hb2 _h2f _h58 _h9f _hf3 _h19 _h0b _he4 _hae _h8b _h1d _h28 _hbb)
+//(_h76 _hc0 _h15 _h75 _h84 _hcf _ha8 _hd2 _h73 _hdb _h79 _h08 _h8a _h9e _hdf _h16))
+ 
+
+/////// Top Module ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [top_module]
+$in () $out () $is
+{
+	$call set_sbox () ()
+	$call set_rcon () ()
+	
+	// Calling a module to let password work done easily
+	$call password_sequence () ()
+	
+	$call encryption_key_reception () (key_out_0)
+	k_0 := key_out_0
+	a_0 := key_out_0
+
+	$call encryption_key_reception () (key_out_1)
+	k_1 := key_out_1
+	a_1 := key_out_1
+
+	$call encryption_key_reception () (key_out_2)
+	k_2 := key_out_2
+	a_2 := key_out_2
+
+	$call encryption_key_reception () (key_out_3)
+	k_3 := key_out_3
+	a_3 := key_out_3
+
+	check := one_1bit
+	$call handshaking () ()
+	
+	$parallelblock	[starting_both_encryption_decryption]
+	{
+		$call encryption_engine (k_0 k_1 k_2 k_3 encry_counter) ()
+		$call decryption_engine (a_0 a_1 a_2 a_3 decry_counter) ()
+	}
+
+}
+
+////// Handshaking  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [handshaking]
+$in () $out () $is
+{
+	out_e := zero
+	$branchblock [handshaking_1]
+	{
+		$merge $entry loopback_1
+		$endmerge
+		
+		temp_0 := input_d
+		$if (temp_0 != zero) $then
+			$place[loopback_1]
+		$endif 	
+	}
+	
+	out_e := zero
+	out_e := one
+	
+	$branchblock [handshaking_2]
+	{
+		$merge $entry loopback_2
+		$endmerge
+		
+		temp_1 := input_d
+		$if (temp_1 != one) $then
+			$place[loopback_2]
+		$endif
+	}
+}
+////// Decryption Engine ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [decryption_engine]
+$in (a0_0 a0_1 a0_2 a0_3 : $uint<32> decry_counter:$uint<128>) $out() $is
+{
+	$branchblock [decryption_loop]
+	{
+		$merge $entry loopback
+			$phi counter := decry_counter $on $entry counter_nxt $on loopback
+		$endmerge
+			
+			$call counter_encry (a0_0 a0_1 a0_2 a0_3 counter) (lw8_0 lw8_1 lw8_2 lw8_3)
+					
+			m1_0 := input_d
+			m1_1 := input_d
+			m1_2 := input_d
+			m1_3 := input_d
+			m1_4 := input_d
+			m1_5 := input_d
+			m1_6 := input_d
+			m1_7 := input_d
+			m1_8 := input_d
+			m1_9 := input_d
+			m1_10 := input_d
+			m1_11 := input_d
+			m1_12 := input_d
+			m1_13 := input_d
+			m1_14 := input_d
+			m1_15 := input_d
+			
+			msg_0_t1 := (m1_0 && m1_1)
+			msg_0_t2 := (m1_2 && m1_3)
+			msg_0_t3 := (msg_0_t1 && msg_0_t2)
+			msg_0 := (msg_0_t3 ^ lw8_0)
+			msg_1_t1 := (m1_4 && m1_5)
+			msg_1_t2 := (m1_6 && m1_7)
+			msg_1_t3 := (msg_1_t1 && msg_1_t2)
+			msg_1 := (msg_1_t3 ^ lw8_1)
+			msg_2_t1 := (m1_8 && m1_9)
+			msg_2_t2 := (m1_10 && m1_11)
+			msg_2_t3 := (msg_2_t1 && msg_2_t2)
+			msg_2 := (msg_2_t3 ^ lw8_2)
+			msg_3_t1 := (m1_12 && m1_13)
+			msg_3_t2 := (m1_14 && m1_15)
+			msg_3_t3 := (msg_3_t1 && msg_3_t2)
+			msg_3 := (msg_3_t3 ^ lw8_3)
+			
+			$split (msg_0 8 8 8 8) (m_0 m_1 m_2 m_3)
+			$split (msg_1 8 8 8 8) (m_4 m_5 m_6 m_7)
+			$split (msg_2 8 8 8 8) (m_8 m_9 m_10 m_11)
+			$split (msg_3 8 8 8 8) (m_12 m_13 m_14 m_15)
+		
+			$call checksum_calculation (m_0 m_1 m_2 m_3 m_4 m_5 m_6 m_7 m_8 m_9 m_10 m_11 m_12 m_13) (mc_14 mc_15)
+			
+			out_d := m_0
+			out_d := m_1
+			out_d := m_2
+			out_d := m_3
+			out_d := m_4
+			out_d := m_5
+			out_d := m_6
+			out_d := m_7
+			out_d := m_8
+			out_d := m_9
+			out_d := m_10
+			out_d := m_11
+			out_d := m_12
+			out_d := m_13
+			
+			counter_nxt := (counter+1)
+			condition_1 := (mc_14 == m_14)
+			condition_2 := (mc_15 == m_15)
+			$if (condition_1 & condition_2) $then
+				check := one_1bit
+				$place[loopback]
+			$else
+				check := zero_1bit
+			$endif
+	}
+
+
+}
+
+
+////// Encryption Engine ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [encryption_engine]
+$in (k0_0 k0_1 k0_2 k0_3 : $uint<32> encry_counter:$uint<128>) $out () $is
+{	
+	$branchblock [encryption_loop]
+	{
+		$merge $entry loopback
+			$phi counter := encry_counter $on $entry counter_nxt $on loopback
+		$endmerge
+			
+			$call counter_encry (k0_0 k0_1 k0_2 k0_3 counter) (lw8_0 lw8_1 lw8_2 lw8_3)
+
+			m_0 := input_e
+			m_1 := input_e
+			m_2 := input_e
+			m_3 := input_e
+			m_4 := input_e
+			m_5 := input_e
+			m_6 := input_e
+			m_7 := input_e
+			m_8 := input_e
+			m_9 := input_e	
+			m_10 := input_e
+			m_11 := input_e 
+			m_12 := input_e
+			m_13 := input_e
+
+			$call checksum_calculation (m_0 m_1 m_2 m_3 m_4 m_5 m_6 m_7 m_8 m_9 m_10 m_11 m_12 m_13) (m_14 m_15)
+
+			msg_0_t1 := (m_0 && m_1)
+			msg_0_t2 := (m_2 && m_3)
+			msg_0_t3 := (msg_0_t1 && msg_0_t2)
+			msg_0 := (msg_0_t3 ^ lw8_0)
+			msg_1_t1 := (m_4 && m_5)
+			msg_1_t2 := (m_6 && m_7)
+			msg_1_t3 := (msg_1_t1 && msg_1_t2)
+			msg_1 := (msg_1_t3 ^ lw8_1)
+			msg_2_t1 := (m_8 && m_9)
+			msg_2_t2 := (m_10 && m_11)
+			msg_2_t3 := (msg_2_t1 && msg_2_t2)
+			msg_2 := (msg_2_t3 ^ lw8_2)
+			msg_3_t1 := (m_12 && m_13)
+			msg_3_t2 := (m_14 && m_15)
+			msg_3_t3 := (msg_3_t1 && msg_3_t2)
+			msg_3 := (msg_3_t3 ^ lw8_3)
+	
+			$call send_msg (msg_0) ()
+			$call send_msg (msg_1) ()
+			$call send_msg (msg_2) ()
+			$call send_msg (msg_3) ()
+			
+			counter_nxt := (counter + 1)
+			
+			$if (check == one_1bit) $then
+					$place[loopback]
+			$endif
+	}	
+}
+
+///// Checksum Calculation ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [checksum]
+$in (m_0 : $uint<8>) $out (c_0 : $uint<1>) $is
+{
+	$split (m_0 1 1 1 1 1 1 1 1) (a_0 a_1 a_2 a_3 a_4 a_5 a_6 a_7)
+	c_0_t1 := (a_0 ^ a_1)
+	c_0_t2 := (a_2 ^ a_3)
+	c_0_t3 := (a_4 ^ a_5)
+	c_0_t4 := (a_6 ^ a_7)
+	c_0_t5 := (c_0_t1 ^ c_0_t2)
+	c_0_t6 := (c_0_t3 ^ c_0_t4)	
+	c_0 := (c_0_t5 ^ c_0_t6)
+}
+
+$module [checksum_calculation]
+$in (m_0 m_1 m_2 m_3 m_4 m_5 m_6 m_7 m_8 m_9 m_10 m_11 m_12 m_13: $uint<8>) $out (m_14 m_15: $uint<8>) $is
+{
+	$call checksum (m_0) (c_0)
+	$call checksum (m_1) (c_1)
+	$call checksum (m_2) (c_2)
+	$call checksum (m_3) (c_3)
+	$call checksum (m_4) (c_4)
+	$call checksum (m_5) (c_5)
+	$call checksum (m_6) (c_6)
+	$call checksum (m_7) (c_7)
+	$call checksum (m_8) (c_8)
+	$call checksum (m_9) (c_9)	
+	$call checksum (m_10) (c_10)	
+	$call checksum (m_11) (c_11)
+	$call checksum (m_12) (c_12)
+	$call checksum (m_13) (c_13)
+	
+	m_14_t1 := (c_7 && c_6)
+	m_14_t2 := (c_5 && c_4)
+	m_14_t3 := (c_3 && c_2)
+	m_14_t4 := (c_1 && c_0)
+	m_14_t5 := (m_14_t1 && m_14_t2)
+	m_14_t6 := (m_14_t3 && m_14_t4)
+	m_14 := (m_14_t5 && m_14_t6)
+	
+	m_15_t1 := (zero_1bit && zero_1bit)
+	m_15_t2 := (c_13 && c_12)
+	m_15_t3 := (c_11 && c_10)
+	m_15_t4 := (c_9 && c_8)
+	m_15_t5 := (m_15_t1 && m_15_t2)
+	m_15_t6 := (m_15_t3 && m_15_t4)
+	m_15 := (m_15_t5 && m_15_t6)
+}
+
+///// Counter Encryption  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [counter_encry]
+$in (k0_0 k0_1 k0_2 k0_3: $uint<32> counter: $uint<128>) $out (lw7_0 lw7_1 lw7_2 lw7_3: $uint<32>) $is
+{
+	text := counter
+	$split (text 32 32 32 32) (w0_0 w0_1 w0_2 w0_3) 
+	
+	$call add_round_key (k0_0 k0_1 k0_2 k0_3 w0_0 w0_1 w0_2 w0_3 zero) (k1_0 k1_1 k1_2 k1_3 w1_0 w1_1 w1_2 w1_3)
+	
+	/// Starting the 9 loop iteration
+	$branchblock [encryption_loop]
+	{	
+		$merge $entry loopback
+			$phi roundnum := one $on $entry roundnxt $on loopback
+			$phi state_0 := w1_0 $on $entry lw4_0 $on loopback
+			$phi state_1 := w1_1 $on $entry lw4_1 $on loopback
+			$phi state_2 := w1_2 $on $entry lw4_2 $on loopback
+			$phi state_3 := w1_3 $on $entry lw4_3 $on loopback
+			$phi k2_0 := k1_0 $on $entry k3_0 $on loopback
+			$phi k2_1 := k1_1 $on $entry k3_1 $on loopback
+			$phi k2_2 := k1_2 $on $entry k3_2 $on loopback
+			$phi k2_3 := k1_3 $on $entry k3_3 $on loopback
+		$endmerge
+			
+			/// sbox part
+			$call sbox_transformation (state_0) (lw1_0)
+			$call sbox_transformation (state_1) (lw1_1)
+			$call sbox_transformation (state_2) (lw1_2)
+			$call sbox_transformation (state_3) (lw1_3)
+			
+			
+			
+			/// Shift row
+			$call shift_row (lw1_0 lw1_1 lw1_2 lw1_3) (lw2_0 lw2_1 lw2_2 lw2_3) 
+			
+			/// Mix Column
+			$call mix_column (lw2_0) (lw3_0)
+			$call mix_column (lw2_1) (lw3_1)
+			$call mix_column (lw2_2) (lw3_2)
+			$call mix_column (lw2_3) (lw3_3)
+	
+			/// add_round_key
+			$call add_round_key (k2_0 k2_1 k2_2 k2_3 lw3_0 lw3_1 lw3_2 lw3_3 roundnum) (k3_0 k3_1 k3_2 k3_3 lw4_0 lw4_1 lw4_2 lw4_3)
+					
+			$if (roundnum < 9) $then
+				roundnxt := (roundnum + 1)
+				$place[loopback]
+			$endif
+	}(lw4_0 => lw4_0 lw4_1 => lw4_1 lw4_2 => lw4_2 lw4_3 => lw4_3 k3_0 => k3_0 k3_1 => k3_1 k3_2 => k3_2 k3_3 => k3_3)
+
+	/// sbox part
+	$call sbox_transformation (lw4_0) (lw5_0)
+	$call sbox_transformation (lw4_1) (lw5_1)
+	$call sbox_transformation (lw4_2) (lw5_2)
+	$call sbox_transformation (lw4_3) (lw5_3)
+	
+	/// Shift row
+	$call shift_row (lw5_0 lw5_1 lw5_2 lw5_3) (lw6_0 lw6_1 lw6_2 lw6_3)
+	
+	/// add_round_key
+	$call add_round_key (k3_0 k3_1 k3_2 k3_3 lw6_0 lw6_1 lw6_2 lw6_3 zero) (k4_0 k4_1 k4_2 k4_3 lw7_0 lw7_1 lw7_2 lw7_3)
+
+}
+///// Send Message /////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [send_msg]
+$in (msg: $uint<32>) $out () $is
+{
+	$split (msg 8 8 8 8) (s_0 s_1 s_2 s_3)
+	out_e := s_0
+	out_e := s_1
+	out_e := s_2
+	out_e := s_3
+}
+
+///// Mix Column     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [two_mult]
+$in (num_0: $uint<8>) $out (op_0: $uint<8>) $is
+{
+	temp := (num_0 << 1)
+	$split(num_0 1 7) (mux_in useless)
+	xor_num := ($mux mux_in _h1b _h00)
+	op_0 := (xor_num ^ temp)
+}
+
+$module [mix_column]
+$in (w: $uint<32>) $out (nw: $uint<32>) $is
+{
+	$split (w 8 8 8 8) (a_0 a_1 a_2 a_3)
+	
+	$call two_mult (a_0) (b_0)
+	$call two_mult (a_1) (b_1)
+	$call two_mult (a_2) (b_2)
+	$call two_mult (a_3) (b_3)
+	
+	c_0_t1 := (b_1 ^ a_1)
+	c_0_t2 := (a_2 ^ a_3)
+	c_0_t3 := (b_0 ^ c_0_t1)
+	c_0 := (c_0_t2 ^ c_0_t3)
+
+	c_1_t1 := (b_2 ^ a_2)
+	c_1_t2 := (a_0 ^ a_3)
+	c_1_t3 := (b_1 ^ c_1_t1)
+	c_1 := (c_1_t2 ^ c_1_t3)
+
+	c_2_t1 := (b_3 ^ a_3)
+	c_2_t2 := (a_0 ^ a_1)
+	c_2_t3 := (b_2 ^ c_2_t1)
+	c_2 := (c_2_t2 ^ c_2_t3)
+
+	c_3_t1 := (b_0 ^ a_0)
+	c_3_t2 := (a_1 ^ a_2)
+	c_3_t3 := (b_3 ^ c_3_t1)
+	c_3 := (c_3_t2 ^ c_3_t3)
+	
+	nw_t1 := (c_0 && c_1)
+	nw_t2 := (c_2 && c_3) 
+	nw := (nw_t1 && nw_t2)
+}
+
+
+///// Shift Row 	 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [shift_row]
+$in (w_0 w_1 w_2 w_3 : $uint<32>) $out (nw_0 nw_1 nw_2 nw_3 : $uint<32>) $is
+{
+	$split (w_0 8 8 8 8) (a_0 a_1 a_2 a_3)
+	$split (w_1 8 8 8 8) (b_0 b_1 b_2 b_3)
+	$split (w_2 8 8 8 8) (c_0 c_1 c_2 c_3)
+	$split (w_3 8 8 8 8) (d_0 d_1 d_2 d_3)
+	
+	nw_0_t1 := (a_0 && b_1)
+	nw_0_t2 := (c_2 && d_3)
+	nw_0 := (nw_0_t1 && nw_0_t2)
+	
+	nw_1_t1 := (b_0 && c_1)
+	nw_1_t2 := (d_2 && a_3)
+	nw_1 := (nw_1_t1 && nw_1_t2)
+	
+	nw_2_t1 := (c_0 && d_1) 
+	nw_2_t2 := (a_2 && b_3)
+	nw_2 := (nw_2_t1 && nw_2_t2)
+	
+	nw_3_t1 := (d_0 && a_1)  
+	nw_3_t2 := (b_2 && c_3)
+	nw_3 := (nw_3_t1 && nw_3_t2)
+
+}
+///// sbox transform ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [sbox_transform]
+$in (num_0: $uint<8>) $out (num_1: $uint<8>) $is
+{
+	$split (num_0 4 4) (row column)
+	temp_0 := (16*column)
+	index := (temp_0 + row)
+	num_1 := sbox[index]
+}
+
+$module [sbox_transformation]
+$in (w:$uint<32>) $out (nw:$uint<32>) $is
+{ 
+	$split (w 8 8 8 8) (a b c d)
+	$call sbox_transform (a) (na)
+	$call sbox_transform (b) (nb)
+	$call sbox_transform (c) (nc)
+	$call sbox_transform (d) (nd)
+	
+	nw_t1 := (na && nb)
+	nw_t2 := (nc && nd) 
+	nw := (nw_t1 && nw_t2)
+}
+///// add round key  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [add_round_key]
+$in (k_0 k_1 k_2 k_3 w_0 w_1 w_2 w_3 : $uint<32> round_num : $uint<8>) $out(nk_0 nk_1 nk_2 nk_3 nw_0 nw_1 nw_2 nw_3 : $uint<32>) $is
+{
+	nw_0 := (k_0 ^ w_0)
+	nw_1 := (k_1 ^ w_1)
+	nw_2 := (k_2 ^ w_2)
+	nw_3 := (k_3 ^ w_3)
+	
+	$split (k_3 8 8 8 8) (a_0 a_1 a_2 a_3)
+	$call sbox_transform (a_0) (b_0)
+	$call sbox_transform (a_1) (b_1)
+	$call sbox_transform (a_2) (b_2)
+	$call sbox_transform (a_3) (b_3)
+	
+	t_0_t1 := (b_1 && b_2)
+	t_0_t2 := (b_3 && b_0) 
+	t_0 := (t_0_t1 && t_0_t2)
+	
+	temp_0 := rcon[round_num]
+	nk_0_t1 := (t_0 ^ k_0)
+	nk_0 := (nk_0_t1 ^ temp_0)
+	nk_1 := (nk_0 ^ k_1)
+	nk_2 := (nk_1 ^ k_2)
+	nk_3 := (nk_2 ^ k_3)
+}
+////// SBOX and RCON Setup //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [set_sbox]
+$in () $out () $is
+{
+	$branchblock [getting_sbox]
+	{
+		$merge $entry loopback
+			$phi index := zero $on $entry nxt_index $on loopback
+		$endmerge 
+		
+		temp_0 := input_e
+		sbox[index] := temp_0
+		
+		$if (index < 255) $then
+			nxt_index := (index+1)
+			$place[loopback]
+		$endif
+	}			
+}
+
+$module [set_rcon]
+$in () $out () $is
+{
+	$branchblock [getting_rcon]
+	{
+		$merge $entry loopback
+			$phi index := zero $on $entry nxt_index $on loopback
+		$endmerge
+		
+		temp_1_0 := input_e
+		temp_1 := (temp_1_0 && zero24)
+		rcon[index] := temp_1
+		
+		$if (index < 9) $then
+			nxt_index := (index+1)
+			$place[loopback]
+		$endif
+	}
+}
+
+///// encryption key reception////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [encryption_key_reception]
+$in () $out (key_out : $uint<32>) $is
+{
+		temp_0 := input_d
+		temp_1 := input_d
+		temp_2 := input_d
+		temp_3 := input_d
+	
+		temp_f_1 := (temp_0 && temp_1)
+		temp_f_2 := (temp_2 && temp_3)
+		key_out := (temp_f_1 && temp_f_2)
+		
+}
+
+///// Password Sequence  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+$module [password_sequence]
+$in () $out () $is
+{
+	$branchblock [sending_password_set_new]
+	{
+		$merge $entry loopback_1
+			$phi index_1 := zero $on $entry nxt_index_1 $on loopback_1
+		$endmerge
+		
+		temp_1 := input_e
+		out_e := temp_1
+	
+		$if (index_1 < 35) $then
+			nxt_index_1 := (index_1+1)
+			$place[loopback_1]
+		$endif
+	}
+
+	$branchblock [getting_new_password]
+	{
+		$merge $entry loopback_2
+			$phi index_2 := zero $on $entry nxt_index_2 $on loopback_2
+		$endmerge
+	
+		temp_2 := input_d
+		out_d := temp_2
+
+		$if (index_2 < 7) $then
+			nxt_index_2 := (index_2+1)
+			$place[loopback_2]
+		$endif
+	}
+	
+	$branchblock [sending_password_set_msg]
+	{
+		$merge $entry loopback_3
+			$phi index_3 := zero $on $entry nxt_index_3 $on loopback_3
+		$endmerge
+		
+		temp_3 := input_e
+		out_e := temp_3
+	
+		$if (index_3 < 11) $then
+			nxt_index_3 := (index_3+1)
+			$place[loopback_3]
+		$endif
+	}
+
+	$branchblock [sending_password_input_msg]
+	{
+		$merge $entry loopback_4
+			$phi index_4 := zero $on $entry nxt_index_4 $on loopback_4
+		$endmerge
+		
+		temp_4 := input_e
+		out_e := temp_4
+	
+		$if (index_4 < 37) $then
+			nxt_index_4 := (index_4+1)
+			$place[loopback_4]
+		$endif
+	}
+
+	$branchblock [getting_input_password]
+	{
+		$merge $entry loopback_5
+			$phi index_5 := zero $on $entry nxt_index_5 $on loopback_5
+		$endmerge
+	
+		temp_5 := input_d
+		out_d := temp_5
+
+		$if (index_5 < 7) $then
+			nxt_index_5 := (index_5+1)
+			$place[loopback_5]
+		$endif
+	}
+	
+	$branchblock [sending_password_correctness_msg]
+	{
+		$merge $entry loopback_6
+			$phi index_6 := zero $on $entry nxt_index_6 $on loopback_6
+		$endmerge
+		
+		temp_6 := input_e
+		out_e := temp_6
+	
+		$if (index_6 < 17) $then
+			nxt_index_6 := (index_6+1)
+			$place[loopback_6]
+		$endif
+	}
+}
