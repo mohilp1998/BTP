@@ -24,8 +24,9 @@ $constant one: $uint<8> := _h01
 $constant zero_1bit: $uint<1> := _h0
 $constant one_1bit: $uint<1> := _h1
 $constant zero24: $uint<24> := _h000000
-$constant encry_counter: $uint<128> := _h54776f204f6e65204e696e652054776f
-$constant decry_counter: $uint<128> := _h54776f204f6e65204e696e652054776f
+$constant one_128: $uint<128> := _h00000000000000000000000000000001
+//$constant encry_counter: $uint<128> := _h54776f204f6e65204e696e652054776f
+//$constant decry_counter: $uint<128> := _h54776f204f6e65204e696e652054776f
 
 //$constant key_0: $uint<32> := _h54686174
 //$constant key_1: $uint<32> := _h73206d79
@@ -77,6 +78,12 @@ $in () $out () $is
 	$call encryption_key_reception () (key_out_3)
 	k_3 := key_out_3
 	a_3 := key_out_3
+
+	// Setting counter value
+	$call counter_encry (k_0 k_1 k_2 k_3 one_128) (cnt_0 cnt_1 cnt_2 cnt_3)
+	encry_counter := ((cnt_0 && cnt_1) && (cnt_2 && cnt_3))
+	decry_counter := ((cnt_0 && cnt_1) && (cnt_2 && cnt_3)) 
+
 
 	check := one_1bit
 	$call handshaking () ()
