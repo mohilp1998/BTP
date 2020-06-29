@@ -64,6 +64,7 @@ void SPI_send(unsigned int tx_data)
 //*****************************************************************************************************************************
 void Store_to_SSI_Buffer()
 {
+	// Storing the data to a looping buffer and updating the head index
     uint32_t temp;
     temp = (uartRX[1] << 8 | uartRX[0]);
 

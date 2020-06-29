@@ -37,8 +37,8 @@
  * Addresses defined here for FLASH storage space, Flash is from 0x00000000 to 0x0003FFFF.
  * Check Debug/BTP_2_Flow.map file to note the unused space FLASH operations
  */
-#define FLASH_BASE_ADDR         ((volatile uint32_t*)0x00020000)
-#define FLASH_BASE_INIT_ADDR    ((volatile uint32_t*)0x00030000)
+#define FLASH_BASE_ADDR         ((volatile uint32_t*)0x00020000) // ADDR to store password
+#define FLASH_BASE_INIT_ADDR    ((volatile uint32_t*)0x00030000) // ADDR to store first or repeating user information
 /*
  * Following are the global variable that are used at multiple different places
  */

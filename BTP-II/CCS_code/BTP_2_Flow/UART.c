@@ -67,6 +67,7 @@ void UART0_Init()
 //*****************************************************************************************************************************
 void Convert_for_UART()
 {
+	// Converting the received data as 2 blocks for UART Transmission done by UART_Transmission
     uint32_t temp;
 
     temp = ADCValue_0[0] & 0x00000FFF;
@@ -77,6 +78,7 @@ void Convert_for_UART()
 //*****************************************************************************************************************************
 void UART_Transmission()
 {
+	// Transmistting the UART data, set by Convert_for_UART
     UARTCharPut(UART_BASE_M, uartTX[0]);
     while(UARTBusy(UART_BASE_M));
     UARTCharPut(UART_BASE_M, uartTX[1]);
@@ -85,6 +87,8 @@ void UART_Transmission()
 //*****************************************************************************
 void UARTSend(uint32_t ui32UARTBase, const uint8_t *pui8Buffer, uint32_t ui32Count)
 {
+	// This is mainly used to transfer the password message in between PC and microcontroller.
+
     //
     // Loop while there are more characters to send.
     //

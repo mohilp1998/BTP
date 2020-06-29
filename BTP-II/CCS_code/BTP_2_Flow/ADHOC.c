@@ -41,11 +41,12 @@ uint8_t rcon[10] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36};
 uint8_t encryption_key[16];
 
 /*
- * This main file include adhoc functions, currently like transmit_sbox_rcon
+ * This main file include adhoc functions, this include functions like sbox, rcon transmission, password initalization and password check.
  */
 //*****************************************************************************************************************************
 void transmit_sbox_rcon()
 {
+	// Transmitting the SBOX and RCON values to FPGA
     uint32_t count = 0;
 
     for (count = 0; count < 256; count++)
@@ -65,6 +66,7 @@ void transmit_sbox_rcon()
 //*****************************************************************************
 void receive_and_transmit_encrpytion_key()
 {
+	// This function was intially used to receive the encryption key for FPGA for PC, but now it is cut out and FPGA receive the key directly from PC
     uint32_t count = 0;
     // From here on we will receive the encryption key which will be send to the FPGA board by our system similar as rcon and sbox
      encryption_key[0] = UARTCharGet(UART_BASE_M);
@@ -95,9 +97,13 @@ void receive_and_transmit_encrpytion_key()
 void password_check()
 {
     char current_password[8], input_password[8];
+
+    // Reading the password stored in the FLASH memory
     Flash_Read(&current_password, sizeof(current_password)/sizeof(uint32_t));
 
+    // Requesting user for the password message
     UARTSend(UART_BASE_M, (uint8_t *)"Please input the 8 character password:", strlen("Please input the 8 character password:"));
+    
     //Reading the password send via UART.
     input_password[0] = UARTCharGet(UART_BASE_M);
     input_password[1] = UARTCharGet(UART_BASE_M);
@@ -108,6 +114,7 @@ void password_check()
     input_password[6] = UARTCharGet(UART_BASE_M);
     input_password[7] = UARTCharGet(UART_BASE_M);
 
+    // Checking for correctness
     if(input_password[0] == current_password[0] && input_password[1] == current_password[1] && input_password[2] == current_password[2] && input_password[3] == current_password[3] && input_password[4] == current_password[4] && input_password[5] == current_password[5] && input_password[6] == current_password[6] && input_password[7] == current_password[7])
     {
         UARTSend(UART_BASE_M, (uint8_t *)"Password Correct  ", strlen("Password Correct  "));
@@ -124,9 +131,11 @@ void password_check()
 void password_init()
 {
     int first_time;
+    
+    // Reading the FLASH variable set to know whether its first time or a returning
     first_time = FLASH_BASE_INIT_ADDR[0];
 
-
+    // If first time the -1 must be in the space else 0
     if (first_time == -1)
     {
         char password[8];
@@ -145,13 +154,14 @@ void password_init()
         //Writing the password to the FLASH_BASE_ADDR
         Flash_Write(&password, sizeof(password)/sizeof(uint32_t));
 
-        //Changing the FLASH_BASE_INIT_ADDR to notify that no longer first time
+        //Changing the FLASH_BASE_INIT_ADDR to notify that no longer first time, i.e changing first_time to zero in flash
         NoLongerFirstTime();
 
         UARTSend(UART_BASE_M, (uint8_t *)"Password Set", strlen("Password Set"));
     }
     else
     {
+    	// Else is required to send and receive useless to ensure correctness of transmission of FPGA
         UARTSend(UART_BASE_M, (uint8_t *)"000000000000000000000000000000000000", strlen("000000000000000000000000000000000000"));
 
         char temp_pass[8];

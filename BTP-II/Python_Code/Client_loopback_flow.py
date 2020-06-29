@@ -1,6 +1,9 @@
 # ----------------------------------------------------------------------------------------------------------
 # Function for password initialization
 def password_logic():
+	# This whole function handles the password message handling, depending on first received message it identify if its repeating user or first time user
+	# and handles both differently.
+
     # msg_len = len("Please set new 8 character password:")
     while(ser.in_waiting < 1):
         pass
@@ -101,12 +104,15 @@ def convert_string_to_int(character):
 # Function to send encryption key
 # ----------------------------------------------------------------------------------------------------------
 def send_encryption_key():
+	# Inputting Encryption key in hex
     print("Please input the 128 bit encryption key to be used for this session in Hex format")
     encry_key = input()
     if len(encry_key) != 32:
         print("The key must have 32 hex characters. Exiting the system")
         quit()
     key_in_list_form = []
+
+    # Converting the string to proper hex format for transmission 
     for x in range(16):
         upper = convert_string_to_int(encry_key[2*x])
         lower = convert_string_to_int(encry_key[(2*x) + 1])
@@ -121,11 +127,14 @@ def send_encryption_key():
 
     key_in_bytes_form = bytes(key_in_list_form)
     # print("sending the encryption key to the system")
+
+    # Sending the key
     ser.write(key_in_bytes_form)
 
 # Below are the functions for loop operation
 # ----------------------------------------------------------------------------------------------------------
 ####### On Message client ########
+# On message from server this function triggers part of client_receiver
 def on_message(client, userdata, message):
     temp = message.payload
     # print("Received Message", temp)
@@ -135,7 +144,7 @@ def on_message(client, userdata, message):
 # These are the threads which will run continuous
 # ----------------------------------------------------------------------------------------------------------
 ##### Basic Server Setting #####
-
+# Read the serial port data from the FPGA and stores in a queue
 def reader_thread():
     while True:
         if ser.in_waiting > 0:
@@ -144,11 +153,12 @@ def reader_thread():
             q_receiving.put(a)
 
 # ----------------------------------------------------------------------------------------------------------
+# Send the data received from FPGA to MQTT server
 def client_sender():
     broker_add = "127.0.0.1"
     topic = "MOHIL/topic_message"
     client = mqtt.Client("Client_1_sender")
-    time.sleep(2)
+    time.sleep(2) # This is done to let receiver connect before the sender
     client.connect(broker_add, 1883, 6000)  # Third one is the timeout
     while True:
         if q_receiving.qsize() > 0:
@@ -158,6 +168,7 @@ def client_sender():
             # print("Published",client.publish(topic, a),a)
 
 # ----------------------------------------------------------------------------------------------------------
+# MQTT server reception thread, receives the data from server and store in the queue
 def client_receiver():
     broker_add = "127.0.0.1"
     topic = "MOHIL/topic_message"
@@ -170,17 +181,19 @@ def client_receiver():
         pass
 
 # ----------------------------------------------------------------------------------------------------------
+# Continuous write data to serial out port to send to FPGA
 def writer_thread():
     while True:
         ser.write(q_sending.get())
 
+# ----------------------------------------------------------------------------------------------------------
 import paho.mqtt.client as mqtt
 import serial
 import time
 import queue
 import threading
 
-# Initializing the system for further steps
+# Initializing the serial communication of the system
 ser = serial.Serial()
 ser.baudrate = 230400
 ser.port = 'COM6'
@@ -190,22 +203,26 @@ queuesize = 1000
 q_receiving = queue.Queue(maxsize=queuesize)
 q_sending = queue.Queue(maxsize=queuesize)
 
+# Starting the serial port
 ser.open()
 ser.reset_input_buffer()
 ser.reset_output_buffer()
 
 # print("Starting Password and encryption key reception work")
+# Logic which handles the password part
 password_logic()
+# Sending the encryption key to FGPA
 send_encryption_key()
 
 # print("Starting the threads for main loop function")
+# Defining all the parallel thread to start the communication
 t1 = threading.Thread(target=reader_thread)
 t2 = threading.Thread(target=writer_thread)
 t3 = threading.Thread(target=client_sender)
 t4 = threading.Thread(target=client_receiver)
 
 
-
+# Starting all the parallel thread to start the communication
 t1.start()
 t2.start()
 t3.start()

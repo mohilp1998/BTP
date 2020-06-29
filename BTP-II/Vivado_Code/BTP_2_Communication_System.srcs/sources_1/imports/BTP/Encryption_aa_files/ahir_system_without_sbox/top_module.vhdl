@@ -69,6 +69,8 @@ architecture arch of BTP_encryption is
     end component;
 begin
     rst <= (not reset);
+
+    -- Necessary for signal time balancing, refer more information on BUFG online
     reset_signal: BUFG port map (I => rst, O => rst_out);
     
 ---------------------------------------------------------------------------------------------------

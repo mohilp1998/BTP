@@ -61,7 +61,6 @@ int main(void)
     //Wait here to let FPGA set in after reset so it can efficiently receive the sbox and rcon
     SysCtlDelay(60000000); // Each call gives a 3 cycle delay thus this number will give around 2.5 second delay
 
-    // IMPORTANT: This is commented out to test directly with PC no FPGA in Between
     // We are sending sbox and rcon before password as it is a  protection against garbage value which is sent by UART before it is properly initialized
     // The idea being that sbox and rcon filling time is significantly more than the time we set the reset to FPGA as high.
 
